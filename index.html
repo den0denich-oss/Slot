@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎰 Слот-машина</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
+  body { background: #0a0a1a; color: #fff; font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; overflow: hidden; }
+  h1 { font-size: 2rem; margin-bottom: 10px; background: linear-gradient(135deg, #f7971e, #ffd200); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-align: center; }
+  
+  #mainUI { display: flex; flex-direction: column; align-items: center; width: 100%; max-width: 420px; transition: opacity 0.4s, transform 0.4s; }
+  #mainUI.hidden { opacity: 0; pointer-events: none; transform: scale(0.96); }
+  .stats { display: flex; gap: 12px; margin-bottom: 15px; flex-wrap: wrap; justify-content: center; font-size: 0.95rem; }
+  .stats span { background: rgba(255,255,255,0.08); padding: 6px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); }
+  
+  .slot-machine { position: relative; width: 100%; height: 110px; background: linear-gradient(180deg, #1a1a2e, #16213e); border-radius: 14px; border: 3px solid #ffd200; overflow: hidden; box-shadow: 0 0 25px rgba(255,210,0,0.15), inset 0 0 20px rgba(0,0,0,0.5); margin-bottom: 10px; }
+  .slot-machine::before, .slot-machine::after { content:''; position:absolute; top:0; bottom:0; width:60px; z-index:2; pointer-events:none; }
+  .slot-machine::before { left:0; background:linear-gradient(90deg,#1a1a2e,transparent); }
+  .slot-machine::after { right:0; background:linear-gradient(-90deg,#1a1a2e,transparent); }
+  .pointer { position:absolute; top:0; left:50%; transform:translateX(-50%); width:3px; height:100%; background:#ff4444; z-index:3; box-shadow:0 0 8px #ff4444; }
+  .pointer::before { content:'▼'; position:absolute; top:-16px; left:50%; transform:translateX(-50%); color:#ff4444; font-size:16px; text-shadow:0 0 6px #ff4444; }
+  .reel-container { display:flex; height:100%; align-items:center; position:absolute; top:0; left:0; will-change:transform; }
+  .reel-item { min-width:100px; height:86px; display:flex; align-items:center; justify-content:center; font-size:2.6rem; margin:0 4px; border-radius:8px; background:rgba(255,255,255,0.04); border:2px solid rgba(255,255,255,0.08); flex-shrink:0; }
+  .reel-item.gift { border-color:#ffd200; background:rgba(255,210,0,0.12); }
+  .reel-item.empty { opacity:0.4; }
+  .reel-item.coins { border-color:#00ff88; background:rgba(0,255,136,0.1); }
+
+  .controls { width:100%; display:flex; flex-direction:column; align-items:center; gap:8px; margin-top:5px; }
+  .spin-btn { padding:12px 45px; font-size:1.15rem; font-weight:bold; border:none; border-radius:12px; cursor:pointer; background:linear-gradient(135deg,#f7971e,#ffd200); color:#1a1a2e; box-shadow:0 4px 15px rgba(255,210,0,0.3); transition:0.2s; text-transform:uppercase; letter-spacing:1px; }
+  .spin-btn:hover:not(:disabled) { transform:translateY(-2px); box-shadow:0 6px 20px rgba(255,210,0,0.4); }
+  .spin-btn:active:not(:disabled) { transform:translateY(1px); }
+  .spin-btn:disabled { background:#555; color:#999; cursor:not-allowed; box-shadow:none; }
+
+  .timer-wrap { display:flex; align-items:center; gap:12px; justify-content:center; width:100%; margin-top:5px; }
+  .timer-text { font-size:1rem; color:#ffd200; font-weight:bold; display:none; min-width:130px; text-align:center; background:rgba(0,0,0,0.3); padding:5px 12px; border-radius:6px; }
+  .skip-btn { background:rgba(255,255,255,0.1); border:1px solid #ffd200; color:#ffd200; padding:5px 10px; border-radius:8px; font-size:0.85rem; cursor:pointer; transition:0.2s; display:none; }
+  .skip-btn:hover { background:rgba(255,210,0,0.15); }
+
+  .overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(10,10,26,0.96); z-index:100; align-items:center; justify-content:center; flex-direction:column; padding:20px; }
+  .overlay.active { display:flex; }
+  .icon-big { font-size:8rem; cursor:pointer; filter:drop-shadow(0 0 30px rgba(255,210,0,0.6)); transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1); margin-bottom:15px; }
+  .icon-big.s1 { transform:scale(1.4); } .icon-big.s2 { transform:scale(2); } .icon-big.s3 { transform:scale(2.8); }
+  .hint { font-size:1.1rem; color:#ccc; animation:pulse 1s infinite; margin-bottom:20px; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  
+  .result-card { background:linear-gradient(145deg,#1e1e32,#16213e); border:2px solid #ffd200; border-radius:18px; padding:25px 20px; text-align:center; max-width:340px; width:90%; box-shadow:0 0 40px rgba(255,210,0,0.2); animation:pop 0.4s ease; display:none; }
+  .result-card.active { display:block; }
+  @keyframes pop { from{transform:scale(0.8);opacity:0} to{transform:scale(1);opacity:1} }
+  .result-card h2 { font-size:1.6rem; color:#ffd200; margin-bottom:10px; }  .result-card p { color:#ddd; line-height:1.5; margin-bottom:20px; }
+  .result-btn { padding:10px 35px; font-size:1.05rem; font-weight:bold; border:none; border-radius:10px; background:linear-gradient(135deg,#f7971e,#ffd200); color:#1a1a2e; transition:0.2s; cursor:not-allowed; opacity:0.6; }
+  .result-btn.ready { cursor:pointer; opacity:1; } .result-btn.ready:hover { transform:translateY(-2px); box-shadow:0 4px 15px rgba(255,210,0,0.4); }
+
+  .modal { 
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: #222235; border: 1px solid #555; border-radius: 14px; padding: 20px;
+    text-align: center; max-width: 300px; width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+    display: none; animation: pop 0.3s ease; z-index: 200;
+  }
+  .modal.active { display: block; }
+  .modal p { margin-bottom: 15px; font-size: 1rem; }
+  .modal-btns { display: flex; gap: 10px; justify-content: center; }
+  .modal-btn { padding: 8px 18px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+  .btn-yes { background: #00cc66; color: #fff; } .btn-no { background: #555; color: #ccc; }
+  .btn-ok { background: #ffd200; color: #1a1a2e; width: 100%; margin-top: 5px; }
+
+  .confetti-box { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 102; overflow: hidden; }
+  .confetti { position: absolute; top: -15px; animation: fall linear forwards; }
+  @keyframes fall { to{top:110vh;transform:rotate(720deg)} }
+  .particle { position: absolute; width: 6px; height: 6px; border-radius: 50%; pointer-events: none; animation: burst 0.6s ease-out forwards; }
+  @keyframes burst { from{opacity:1;transform:translate(0,0) scale(1)} to{opacity:0;transform:translate(var(--tx),var(--ty)) scale(0)} }
+</style>
+</head>
+<body>
+
+<div id="mainUI">
+  <h1>🎰 Слот-машина</h1>
+  <div class="stats">
+    <span>🎰 Прокруток: <b id="spinsCount">0</b></span>
+    <span>🎁 Подарков: <b id="giftsCount">0</b></span>
+    <span>💰 Монет: <b id="coinsCount">0</b></span>
+  </div>
+
+  <div class="slot-machine" id="slotMachine">
+    <div class="pointer"></div>
+    <div class="reel-container" id="reel"></div>
+  </div>
+
+  <div class="controls">
+    <button class="spin-btn" id="spinBtn">🎲 Крутить</button>
+    <div class="timer-wrap">
+      <div class="timer-text" id="timerText"></div>
+      <button class="skip-btn" id="skipBtn">💰 Пропустить</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="resultOverlay">
+  <div class="icon-big" id="resultIcon">🎁</div>  <div class="hint" id="resultHint">Нажми на подарок 3 раза!</div>
+  <div class="result-card" id="resultCard">
+    <h2 id="cardTitle">🎉 Поздравляем!</h2>
+    <p id="cardText">Подарок скоро придет в чат Telegram, ожидайте!</p>
+    <button class="result-btn" id="resultBtn">ОК</button>
+  </div>
+</div>
+
+<div class="modal" id="confirmModal">
+  <p id="confirmText">Пропустить?</p>
+  <div class="modal-btns">
+    <button class="modal-btn btn-yes" id="yesBtn">Да</button>
+    <button class="modal-btn btn-no" id="noBtn">Нет</button>
+  </div>
+</div>
+
+<div class="modal" id="errorModal">
+  <p>❌ Недостаточно монет!</p>
+  <button class="modal-btn btn-ok" id="errOk">OK</button>
+</div>
+
+<div class="confetti-box" id="confettiBox"></div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const COOLDOWNS = { GIFT: 300000, COINS: 30000 };
+  const ITEM_W = 108, TOTAL_ITEMS = 40, GIFT_IDX = TOTAL_ITEMS - 4;
+  
+  let isSpinning = false, audioCtx = null, tickTimer = null, timerInterval = null, okTimer = null;
+  let state = { spins: 0, gifts: 0, coins: 0, cdMs: 0, endTime: 0 };
+  
+  const KEYS = { s:'sl_s', g:'sl_g', c:'sl_c', cd:'sl_cd', end:'sl_end' };
+  function load() {
+    try {
+      state.spins = parseInt(localStorage.getItem(KEYS.s)) || 0;
+      state.gifts = parseInt(localStorage.getItem(KEYS.g)) || 0;
+      state.coins = parseInt(localStorage.getItem(KEYS.c)) || 0;
+      state.cdMs = parseInt(localStorage.getItem(KEYS.cd)) || 0;
+      state.endTime = parseInt(localStorage.getItem(KEYS.end)) || 0;
+    } catch(e) {}
+  }
+  function save() {
+    try {
+      localStorage.setItem(KEYS.s, state.spins);
+      localStorage.setItem(KEYS.g, state.gifts);
+      localStorage.setItem(KEYS.c, state.coins);
+      localStorage.setItem(KEYS.cd, state.cdMs);
+      localStorage.setItem(KEYS.end, state.endTime);
+    } catch(e) {}
+  }
+  const els = {
+    mainUI: document.getElementById('mainUI'), spins: document.getElementById('spinsCount'),
+    gifts: document.getElementById('giftsCount'), coins: document.getElementById('coinsCount'),
+    reel: document.getElementById('reel'), machine: document.getElementById('slotMachine'),
+    spinBtn: document.getElementById('spinBtn'), timerText: document.getElementById('timerText'),
+    skipBtn: document.getElementById('skipBtn'), resultOv: document.getElementById('resultOverlay'),
+    resultIcon: document.getElementById('resultIcon'), resultHint: document.getElementById('resultHint'),
+    resultCard: document.getElementById('resultCard'), cardTitle: document.getElementById('cardTitle'),
+    cardText: document.getElementById('cardText'), resultBtn: document.getElementById('resultBtn'),
+    confMod: document.getElementById('confirmModal'), confText: document.getElementById('confirmText'),
+    yesBtn: document.getElementById('yesBtn'), noBtn: document.getElementById('noBtn'),
+    errMod: document.getElementById('errorModal'), errOk: document.getElementById('errOk'),
+    confBox: document.getElementById('confettiBox')
+  };
+
+  function ensureAudio() {
+    try { if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)(); if(audioCtx.state==='suspended') audioCtx.resume(); } catch(e){}
+  }
+  function tone(f,d,t,v) {
+    if(!audioCtx) return;
+    try {
+      const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+      o.type=t||'sine'; o.frequency.value=f;
+      g.gain.setValueAtTime(v||0.12, audioCtx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime+d);
+      o.connect(g).connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime+d);
+    } catch(e){}
+  }
+  const Snd = {
+    tick: ()=>tone(700+Math.random()*200,0.04,'square',0.05),
+    win: ()=>{[523,659,784,1047].forEach((n,i)=>setTimeout(()=>tone(n,0.25,'sine',0.15),i*110));},
+    coin: ()=>{tone(1200,0.08,'sine',0.1); setTimeout(()=>tone(1600,0.08,'sine',0.1),80); setTimeout(()=>tone(2000,0.15,'sine',0.12),150);},
+    fail: ()=>{tone(200,0.2,'triangle',0.08); setTimeout(()=>tone(150,0.3,'triangle',0.08),150);},
+    click: ()=>tone(900,0.06,'triangle',0.1),
+    open: ()=>{[400,600,800,1200].forEach((n,i)=>setTimeout(()=>tone(n,0.12,'sine',0.12),i*70));},
+    pop: ()=>tone(500,0.05,'sine',0.1)
+  };
+
+  function updateStatsUI() {
+    els.spins.textContent = state.spins;
+    els.gifts.textContent = state.gifts;
+    els.coins.textContent = state.coins;
+  }
+
+  function startTimerUI() {
+    if(timerInterval) clearInterval(timerInterval);
+    const now = Date.now();
+    if(state.endTime <= now || state.cdMs === 0) {
+      state.cdMs = 0; state.endTime = 0; save(); resetTimerUI(); updateStatsUI(); return;    }
+    els.spinBtn.disabled = true; els.spinBtn.textContent = '⏳ Ждите...';
+    els.timerText.style.display = 'block';
+    els.skipBtn.style.display = 'inline-block';
+    els.skipBtn.textContent = '💰 Пропустить (' + (state.cdMs === COOLDOWNS.GIFT ? 750 : 100) + ')';
+    
+    timerInterval = setInterval(()=>{
+      const rem = state.endTime - Date.now();
+      if(rem <= 0) { clearInterval(timerInterval); timerInterval=null; state.cdMs=0; state.endTime=0; save(); resetTimerUI(); updateStatsUI(); return; }
+      const m = Math.floor(rem/60000), s = Math.floor((rem%60000)/1000);
+      els.timerText.textContent = '⏱ ' + m + ':' + (s<10?'0':'') + s;
+    }, 100);
+  }
+
+  function resetTimerUI() {
+    if(timerInterval) clearInterval(timerInterval); timerInterval=null;
+    els.spinBtn.disabled = false; els.spinBtn.textContent = '🎲 Крутить';
+    els.timerText.style.display = 'none'; els.skipBtn.style.display = 'none';
+  }
+
+  function buildReel(type) {
+    els.reel.innerHTML = '';
+    for(let i=0; i<TOTAL_ITEMS; i++) {
+      const d = document.createElement('div'); d.className = 'reel-item empty';
+      if(i === GIFT_IDX) {
+        if(type==='gift') { d.className='reel-item gift'; d.textContent='🎁'; }
+        else if(type==='coin') { d.className='reel-item coins'; d.textContent='🪙'; }
+        else { d.textContent='❌'; }
+      } else { d.textContent=['💨','🕳️','😢','💤','❌'][i%5]; }
+      els.reel.appendChild(d);
+    }
+  }
+
+  function spin() {
+    if(isSpinning) return;
+    ensureAudio();
+    if(state.cdMs > 0 && Date.now() < state.endTime) {
+      const cost = state.cdMs === COOLDOWNS.GIFT ? 750 : 100;
+      els.confText.textContent = 'Пропустить ожидание за ' + cost + ' монет?';
+      els.confMod.dataset.cost = cost;
+      els.confMod.classList.add('active');
+      Snd.pop();
+      return;
+    }
+
+    isSpinning = true; els.spinBtn.disabled = true;
+    const roll = Math.random();
+    const type = roll < 0.15 ? 'gift' : (roll < 0.90 ? 'coin' : 'nothing');
+
+    buildReel(type);    const cx = els.machine.offsetWidth / 2;
+    const target = -(GIFT_IDX * ITEM_W) + (cx - ITEM_W / 2);
+    els.reel.style.transition = 'none'; els.reel.style.transform = 'translateX(0)';
+    void els.reel.offsetWidth;
+
+    let delay = 40;
+    function tLoop() { Snd.tick(); delay+=45; if(delay<450) tickTimer=setTimeout(tLoop, delay); }
+    tLoop();
+
+    els.reel.style.transition = 'transform 4.5s cubic-bezier(0.2,0.8,0.2,1)';
+    els.reel.style.transform = 'translateX(' + target + 'px)';
+
+    setTimeout(()=>{
+      clearTimeout(tickTimer);
+      state.spins++;
+      if(type==='gift') {
+        state.gifts++; state.cdMs = COOLDOWNS.GIFT;
+        state.endTime = Date.now() + state.cdMs;
+        save(); updateStatsUI(); startTimerUI();
+        setTimeout(showGiftFlow, 400);
+      } else if(type==='coin') {
+        state.cdMs = COOLDOWNS.COINS;
+        state.endTime = Date.now() + state.cdMs;
+        const amt = Math.random()<0.05 ? 750 : Math.floor(Math.random()*190)+10;
+        state.coins += amt;
+        save(); updateStatsUI(); startTimerUI();
+        setTimeout(()=>showCoinFlow(amt), 400);
+      } else {
+        state.cdMs = 0; state.endTime = 0;
+        save(); updateStatsUI(); resetTimerUI();
+        isSpinning = false;
+      }
+    }, 4700);
+  }
+
+  function showGiftFlow() {
+    let clicks = 0;
+    els.resultIcon.textContent='🎁'; els.resultIcon.className='icon-big'; els.resultIcon.style.display='block';
+    els.resultHint.style.display='block'; els.resultHint.textContent='Нажми на подарок 3 раза!';
+    els.resultCard.classList.remove('active'); els.resultOv.classList.add('active'); els.mainUI.classList.add('hidden');
+
+    els.resultIcon.onclick = ()=>{
+      clicks++; Snd.click(); spawnFX();
+      if(clicks===1) { els.resultIcon.className='icon-big s1'; els.resultHint.textContent='Ещё 2 раза!'; }
+      else if(clicks===2) { els.resultIcon.className='icon-big s2'; els.resultHint.textContent='Ещё 1 раз!'; }
+      else {
+        els.resultIcon.className='icon-big s3'; els.resultHint.style.display='none';
+        setTimeout(()=>{ Snd.open(); els.resultIcon.style.display='none'; prepareResult('gift'); },500);
+      }
+    };  }
+
+  function showCoinFlow(amt) {
+    els.resultIcon.textContent='🪙'; els.resultIcon.className='icon-big s2'; els.resultIcon.style.display='block';
+    els.resultHint.style.display='none'; els.resultCard.classList.remove('active');
+    els.resultOv.classList.add('active'); els.mainUI.classList.add('hidden');
+    setTimeout(()=>{ Snd.open(); els.resultIcon.style.display='none'; prepareResult('coin', amt); },400);
+  }
+
+  function prepareResult(type, amt) {
+    if(type==='gift') {
+      els.cardTitle.textContent='🎉 Поздравляем!';
+      els.cardText.textContent='Подарок скоро придет в чат Telegram, ожидайте!';
+      startOkTimer(5);
+    } else {
+      els.cardTitle.textContent='💰 Монеты!';
+      els.cardText.textContent='Вы получили ' + amt + ' монет!';
+      startOkTimer(3);
+    }
+    els.resultCard.classList.add('active'); launchConfetti();
+  }
+
+  function startOkTimer(sec) {
+    if(okTimer) clearInterval(okTimer);
+    els.resultBtn.textContent='ОК ('+sec+')'; els.resultBtn.classList.remove('ready'); els.resultBtn.disabled=true;
+    okTimer=setInterval(()=>{
+      sec--;
+      if(sec>0) els.resultBtn.textContent='ОК ('+sec+')';
+      else { clearInterval(okTimer); els.resultBtn.textContent='ОК'; els.resultBtn.classList.add('ready'); els.resultBtn.disabled=false; }
+    },1000);
+  }
+
+  function closeResult() {
+    els.resultOv.classList.remove('active'); els.resultCard.classList.remove('active');
+    els.mainUI.classList.remove('hidden'); isSpinning=false; startTimerUI();
+  }
+
+  function spawnFX() {
+    const r=els.resultIcon.getBoundingClientRect(), cx=r.left+r.width/2, cy=r.top+r.height/2;
+    const cols=['#ffd200','#f7971e','#ff4444','#44ff44','#4444ff','#fff'];
+    for(let i=0;i<15;i++){
+      const p=document.createElement('div'); p.className='particle';
+      const a=(Math.PI*2/15)*i, d=50+Math.random()*70;
+      p.style.cssText='left:'+cx+'px;top:'+cy+'px;--tx:'+Math.cos(a)*d+'px;--ty:'+Math.sin(a)*d+'px;background:'+cols[i%6];
+      els.resultOv.appendChild(p); setTimeout(()=>p.remove(),600);
+    }
+  }
+  function launchConfetti() {
+    const cols=['#ffd200','#f7971e','#ff4444','#44ff44','#4444ff','#fff'];
+    for(let i=0;i<40;i++){      setTimeout(()=>{
+        const c=document.createElement('div'); c.className='confetti';
+        c.style.cssText='left:'+Math.random()*100+'vw;background:'+cols[i%6]+';width:'+(6+Math.random()*8)+'px;height:'+(6+Math.random()*8)+'px;border-radius:'+(Math.random()>0.5?'50%':'2px')+';animation-duration:'+(2+Math.random()*2)+'s';
+        els.confBox.appendChild(c); setTimeout(()=>c.remove(),4500);
+      }, i*30);
+    }
+  }
+
+  els.skipBtn.addEventListener('click', ()=>{
+    const cost = parseInt(els.skipBtn.textContent.match(/\d+/)[0], 10);
+    els.confText.textContent='Пропустить ожидание за '+cost+' монет?';
+    els.confMod.dataset.cost=cost; els.confMod.classList.add('active'); Snd.pop();
+  });
+
+  els.yesBtn.addEventListener('click', ()=>{
+    els.confMod.classList.remove('active');
+    const cost = parseInt(els.confMod.dataset.cost, 10)||0;
+    if(state.coins >= cost) {
+      Snd.open(); state.coins -= cost; state.cdMs=0; state.endTime=0; save(); updateStatsUI(); resetTimerUI();
+    } else { els.errMod.classList.add('active'); Snd.fail(); }
+  });
+
+  els.noBtn.addEventListener('click', ()=>els.confMod.classList.remove('active'));
+  els.errOk.addEventListener('click', ()=>els.errMod.classList.remove('active'));
+  els.resultBtn.addEventListener('click', ()=>!els.resultBtn.disabled && closeResult());
+  els.spinBtn.addEventListener('click', spin);
+
+  load();
+  if(state.cdMs > 0 && Date.now() < state.endTime) startTimerUI(); else resetTimerUI();
+  updateStatsUI();
+});
+</script>
+</body>
+</html>
