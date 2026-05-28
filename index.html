@@ -241,7 +241,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     isSpinning = true; els.spinBtn.disabled = true;
     const roll = Math.random();
-    const type = roll < 0.05 ? 'gift' : (roll < 0.50 ? 'coin' : 'nothing');
+    const type = roll < 0.05 ? 'gift' : (roll < 0.37 ? 'coin' : 'nothing');
 
     buildReel(type);    const cx = els.machine.offsetWidth / 2;
     const target = -(GIFT_IDX * ITEM_W) + (cx - ITEM_W / 2);
